@@ -60,9 +60,6 @@ def get_unique_gpu_models():
                 gpu_models.add(row["Model"])
     return gpu_models
 
-unique_gpu_models = get_unique_gpu_models()
-
-
 # Fetch GPUs from eBay
 gpus = get_unique_gpu_models()
 
@@ -70,17 +67,29 @@ gpu_deals = {}
 
 if gpus is not None:
     for gpu in gpus:
-        gpu_name = gpu["Model"]
-        matching_model = find_best_matching_model(gpu_name, unique_gpu_models)
-        if matching_model is not None:
-            # Fetch GPU performance
-            performance = fetch_gpu_performance(matching_model)
-            # ... (rest of the code)
+        gpu_name = gpu["title"][0]
+        if "sellingStatus" in gpu and gpu["sellingStatus"]:
+            selling_status_list = gpu["sellingStatus"]
+            if isinstance(selling_status_list, list) and len(selling_status_list) > 0:
+                selling_status = selling_status_list[0]
+                if "currentPrice" in selling_status and selling_status["currentPrice"]:
+                    gpu_price = float(selling_status["currentPrice"][0]["__value__"])
+                else:
+                    gpu_price = None
+            else:
+                gpu_price = None
         else:
-            print(f"No matching model found for: {gpu_name}")
+            gpu_price = None
+        gpu_url = gpu["viewItemURL"][0]
+
+        # Fetch GPU performance
+        performance = fetch_gpu_performance(gpu_name)
+        if performance and gpu_price:
+            if gpu_name not in gpu_deals or gpu_price < gpu_deals[gpu_name]["price"]:
+                ratio = performance / gpu_price
+                gpu_deals[gpu_name] = {"name": gpu_name, "price": gpu_price, "url": gpu_url, "ratio": ratio}
 else:
     print("Error: No GPUs found.")
-
 
 # Sort GPUs by value to performance ratio
 sorted_gpu_deals = sorted(gpu_deals.values(), key=itemgetter("ratio"), reverse=True)
