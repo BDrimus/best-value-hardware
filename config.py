@@ -1,0 +1,2 @@
+EBAY_APP_ID = "BenceDri-BestValu-PRD-507ba9c25-6f94291c"
+EBAY_CERT_ID = "PRD-0ba8b4bda5c9-99b2-4928-951a-14fa"
