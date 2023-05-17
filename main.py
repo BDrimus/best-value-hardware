@@ -94,15 +94,19 @@ def fetch_gpu_from_ebay(api, data, exclude=[]):
 
         if first_valid_item:
             title = first_valid_item.title
-            price = first_valid_item.sellingStatus.currentPrice.value
+            price = float(first_valid_item.sellingStatus.currentPrice.value)
+            shipping_cost = float(first_valid_item.shippingInfo.shippingServiceCost.value) if hasattr(
+                first_valid_item.shippingInfo, 'shippingServiceCost') else 0
+            total_price = price + shipping_cost
             listing_url = first_valid_item.viewItemURL
         else:
             title = 'N/A'
-            price = 'N/A'
+            total_price = 'N/A'
+            shipping_cost = 'N/A'
             listing_url = 'N/A'
 
-        result = {'name': keyword, 'title': title,
-                  'price': price, 'url': listing_url}
+        result = {'name': keyword, 'title': title, 'price': total_price,
+                  'shipping_cost': shipping_cost, 'url': listing_url}
         ebay_results.append(result)
 
     return ebay_results
@@ -110,14 +114,17 @@ def fetch_gpu_from_ebay(api, data, exclude=[]):
 
 def calculate_performance_to_price_ratio(ebay_results, data):
     for result, row_data in zip(ebay_results, data):
-        if result['price'] != 'N/A':
+        if result['price'] != 'N/A' and result['shipping_cost'] != 'N/A':
             g3d_mark = int(row_data['g3d-mark'].replace(',', ''))
             price = float(result['price'])
-            result['performance_to_price_ratio'] = g3d_mark / price
+            shipping_cost = float(result['shipping_cost'])
+            total_price = price + shipping_cost
+            result['performance_to_price_ratio'] = g3d_mark / total_price
         else:
             result['performance_to_price_ratio'] = 0
 
     return ebay_results
+
 
 
 def display_top_deals(ebay_results, data, n=10):
@@ -131,7 +138,7 @@ def display_top_deals(ebay_results, data, n=10):
         g3d_mark = gpu_data["g3d-mark"] if gpu_data else "N/A"
         print(f"{rank}. {deal['name']} - {deal['title']}")
         print(
-            f"   Price: {deal['price']} - Performance-to-Price Ratio: {deal['performance_to_price_ratio']:.2f} - G3D Mark: {g3d_mark}")
+            f"   Price: {deal['price']} - Shipping Cost: {deal['shipping_cost']} - Performance-to-Price Ratio: {deal['performance_to_price_ratio']:.2f} - G3D Mark: {g3d_mark}")
         print(f"   URL: {deal['url']}\n")
 
 
@@ -152,7 +159,7 @@ def main():
     api = Finding(siteid='EBAY-GB', appid=APP_ID, config_file=None)
 
     # Add any exclusion keywords here
-    exclude = ['faulty', 'box', 'cover', 'plate', 'bracket', 'fan',
+    exclude = ['faulty', 'box', 'cover', 'plate', 'bracket', 'fan', 'bridge', 'cooler',
                'mat', 'chip', 'block', 'bezel', 'cable', 'mod', 'FDC10M12S9-C']
 
     ebay_results = fetch_gpu_from_ebay(api, data, exclude=exclude)
