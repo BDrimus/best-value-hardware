@@ -14,200 +14,106 @@ from ebaysdk.finding import Connection as Finding
 from ebaysdk.exception import ConnectionError
 
 
-# # Function to fetch GPUs from eBay API
-# def fetch_gpus():
-#     try:
-#         api = Finding(siteid='EBAY-GB', appid=APP_ID, config_file=None)
-#         payload = {
-#             'keywords': 'gpu',
-#             'itemFilter': [
-#                 {'name': 'ListingType', 'value': 'FixedPrice'}
-#             ]
-#         }
-#         response = api.execute('findItemsAdvanced', payload)
-#         search_result = response.dict().get("searchResult")
-#         if search_result is not None and "item" in search_result:
-#             return search_result["item"]
-#         else:
-#             return None
-#     except ConnectionError as e:
-#         print(e)
-#         print(e.response.dict())
+def setup_driver(url):
+    driver = webdriver.Chrome()
+    driver.get(url)
+    return driver
 
 
-# # Function to fetch GPU performance from UserBenchmark
-# def fetch_gpu_performance(gpu_name):
-#     with open("GPU_UserBenchmarks.csv", newline="") as csvfile:
-#         reader = csv.DictReader(csvfile)
-#         for row in reader:
-#             if row["Type"] == "GPU" and row["Model"].lower() == gpu_name.lower():
-#                 return float(row["Benchmark"])
-#     return None
+def click_buttons(driver):
+    wait = WebDriverWait(driver, 20)
+    button = wait.until(EC.element_to_be_clickable(
+        (By.XPATH, '//*[@id="qc-cmp2-ui"]/div[2]/div/button[2]')))
+    button.click()
 
-# def find_best_matching_model(gpu_name, gpu_models):
-#     for model in gpu_models:
-#         if model.lower() in gpu_name.lower():
-#             return model
-#     return None
+    button = wait.until(EC.element_to_be_clickable(
+        (By.XPATH, '//*[@id="cputable_length"]/label/select/option[4]')))
+    button.click()
 
-# def get_brand(gpu_name):
-#     with open("GPU_UserBenchmarks.csv", newline="") as csvfile:
-#         reader = csv.DictReader(csvfile)
-#         for row in reader:
-#             if row["Type"] == "GPU" and row["Model"].lower() == gpu_name.lower():
-#                 return row["Brand"]
-#     return None
-
-# def get_unique_gpu_models():
-#     gpu_models = set()
-#     with open("GPU_UserBenchmarks.csv", newline="") as csvfile:
-#         reader = csv.DictReader(csvfile)
-#         for row in reader:
-#             if row["Type"] == "GPU" and row["Brand"] in ["Nvidia", "AMD"]:
-#                 gpu_models.add(row["Model"])
-#     return gpu_models
-
-# # Fetch GPUs from eBay
-# gpus = get_unique_gpu_models()
-
-# gpu_deals = {}
-
-# if gpus is not None:
-#     for gpu in gpus:
-#         gpu_name = gpu["title"][0]
-#         if "sellingStatus" in gpu and gpu["sellingStatus"]:
-#             selling_status_list = gpu["sellingStatus"]
-#             if isinstance(selling_status_list, list) and len(selling_status_list) > 0:
-#                 selling_status = selling_status_list[0]
-#                 if "currentPrice" in selling_status and selling_status["currentPrice"]:
-#                     gpu_price = float(selling_status["currentPrice"][0]["__value__"])
-#                 else:
-#                     gpu_price = None
-#             else:
-#                 gpu_price = None
-#         else:
-#             gpu_price = None
-#         gpu_url = gpu["viewItemURL"][0]
-
-#         # Fetch GPU performance
-#         performance = fetch_gpu_performance(gpu_name)
-#         if performance and gpu_price:
-#             if gpu_name not in gpu_deals or gpu_price < gpu_deals[gpu_name]["price"]:
-#                 ratio = performance / gpu_price
-#                 gpu_deals[gpu_name] = {"name": gpu_name, "price": gpu_price, "url": gpu_url, "ratio": ratio}
-# else:
-#     print("Error: No GPUs found.")
+    button = wait.until(EC.element_to_be_clickable(
+        (By.XPATH, '//*[@id="cputable"]/thead/tr/th[3]')))
+    button.click()
+    button.click()
 
 
-# Set up the Chrome WebDriver
-driver = webdriver.Chrome()
+def get_gpu_data(driver):
+    table = driver.find_element(By.XPATH, '//*[@id="cputable"]/tbody')
+    rows = table.find_elements(By.TAG_NAME, 'tr')
+    data = []
 
-# Open the website
-url = "https://www.videocardbenchmark.net/GPU_mega_page.html"
-driver.get(url)
+    for row in rows:
+        cells = row.find_elements(By.TAG_NAME, 'td')
+        row_data = {
+            'name': cells[1].text,
+            'g3d-mark': cells[2].text,
+        }
+        g3d_mark = int(row_data['g3d-mark'].replace(',', ''))
 
-# Wait for the button to be present and clickable
-wait = WebDriverWait(driver, 20)
-button = wait.until(EC.element_to_be_clickable(
-    (By.XPATH, '//*[@id="qc-cmp2-ui"]/div[2]/div/button[2]')))
-button.click()
-
-button = wait.until(EC.element_to_be_clickable(
-    (By.XPATH, '//*[@id="cputable_length"]/label/select/option[4]')))
-button.click()
-
-button = wait.until(EC.element_to_be_clickable(
-    (By.XPATH, '//*[@id="cputable"]/thead/tr/th[3]')))
-button.click()
-button.click()
-
-# Find the table element
-table = driver.find_element(By.XPATH, '//*[@id="cputable"]/tbody')
-
-# Find all the rows in the table
-rows = table.find_elements(By.TAG_NAME, 'tr')
-
-# Initialize an empty list to store the row data
-data = []
-
-# Iterate over each row
-for row in rows:
-    # Find all the cells in the row
-    cells = row.find_elements(By.TAG_NAME, 'td')
-
-    # Extract the text from each cell and store it in a dictionary
-    row_data = {
-        'name': cells[1].text,
-        'g3d-mark': cells[2].text,
-    }
-
-    # Remove the comma from the 'g3d-mark' string and convert it to an integer
-    g3d_mark = int(row_data['g3d-mark'].replace(',', ''))
-
-    if g3d_mark < 30000:
-        break
-
-    # Append the row data to the data list
-    data.append(row_data)
-
-# Print the scraped data
-for row in data:
-    print(row)
-
-# Function to fetch GPUs from eBay API
-api = Finding(siteid='EBAY-GB', appid=APP_ID, config_file=None)
-ebay_results = []
-for row in data:
-    keyword = row['name']
-    payload = {
-        'keywords': keyword,
-        'categoryId': '27386',
-        'itemFilter': [
-            {'name': 'ListingType', 'value': 'FixedPrice'},
-        ],
-        'paginationInput': {
-            'entriesPerPage': 10,
-            'pageNumber': 1,
-        },
-        'sortOrder': 'PricePlusShippingLowest',
-    }
-
-    # Execute the findItemsAdvanced operation
-    response = api.execute('findItemsAdvanced', payload)
-    if response.reply.searchResult._count != '0':
-        items = response.reply.searchResult.item
-    else:
-        items = []
-
-    # Check each item's title and skip items containing 'box'
-    first_valid_item = None
-    for item in items:
-        if 'box' not in item.title.lower():
-            first_valid_item = item
+        if g3d_mark < 30000:
             break
 
-    # If a valid item is found, extract the relevant information
-    if first_valid_item:
-        title = first_valid_item.title
-        price = first_valid_item.sellingStatus.currentPrice.value
-        listing_url = first_valid_item.viewItemURL
-    else:
-        title = 'N/A'
-        price = 'N/A'
-        listing_url = 'N/A'
+        data.append(row_data)
 
-    # Store the title, price, and URL in a dictionary and append it to the results list
-    result = {'name': keyword, 'title': title, 'price': price,
-              'url': listing_url}
-    ebay_results.append(result)
-
-# Print the search results
-for result in ebay_results:
-    print(result)
+    return data
 
 
-# Wait for user input before closing the browser
-input("Press Enter to close the browser...")
+def fetch_gpu_from_ebay(api, data):
+    ebay_results = []
+    for row in data:
+        keyword = row['name']
+        payload = {
+            'keywords': keyword,
+            'categoryId': '27386',
+            'itemFilter': [
+                {'name': 'ListingType', 'value': 'FixedPrice'},
+            ],
+            'paginationInput': {
+                'entriesPerPage': 10,
+                'pageNumber': 1,
+            },
+            'sortOrder': 'PricePlusShippingLowest',
+        }
+
+        response = api.execute('findItemsAdvanced', payload)
+        items = response.reply.searchResult.item if response.reply.searchResult._count != '0' else []
+
+        first_valid_item = next((item for item in items if 'box' not in item.title.lower()), None)
+
+        if first_valid_item:
+            title = first_valid_item.title
+            price = first_valid_item.sellingStatus.currentPrice.value
+            listing_url = first_valid_item.viewItemURL
+        else:
+            title = 'N/A'
+            price = 'N/A'
+            listing_url = 'N/A'
+
+        result = {'name': keyword, 'title': title, 'price': price, 'url': listing_url}
+        ebay_results.append(result)
+
+    return ebay_results
+
+
+def main():
+    url = "https://www.videocardbenchmark.net/GPU_mega_page.html"
+    driver = setup_driver(url)
+    click_buttons(driver)
+    data = get_gpu_data(driver)
+    api = Finding(siteid='EBAY-GB', appid=APP_ID, config_file=None)
+    ebay_results = fetch_gpu_from_ebay(api, data)
+
+    for row in data:
+        print(row)
+
+    for result in ebay_results:
+        print(result)
+
+    input("Press Enter to close the browser...")
+
+
+if __name__ == "__main__":
+    main()
+
 
 # Close the browser when you're done
 
