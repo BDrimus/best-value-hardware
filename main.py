@@ -1,5 +1,3 @@
-import requests
-import time
 import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -49,7 +47,7 @@ def get_gpu_data(driver):
         }
         g3d_mark = int(row_data['g3d-mark'].replace(',', ''))
 
-        if g3d_mark < 30000:
+        if g3d_mark < 20000:
             break
 
         data.append(row_data)
@@ -77,7 +75,8 @@ def fetch_gpu_from_ebay(api, data):
         response = api.execute('findItemsAdvanced', payload)
         items = response.reply.searchResult.item if response.reply.searchResult._count != '0' else []
 
-        first_valid_item = next((item for item in items if 'box' not in item.title.lower()), None)
+        first_valid_item = next(
+            (item for item in items if 'box' not in item.title.lower()), None)
 
         if first_valid_item:
             title = first_valid_item.title
@@ -88,10 +87,36 @@ def fetch_gpu_from_ebay(api, data):
             price = 'N/A'
             listing_url = 'N/A'
 
-        result = {'name': keyword, 'title': title, 'price': price, 'url': listing_url}
+        result = {'name': keyword, 'title': title,
+                  'price': price, 'url': listing_url}
         ebay_results.append(result)
 
     return ebay_results
+
+
+def calculate_performance_to_price_ratio(ebay_results, data):
+    for result, row_data in zip(ebay_results, data):
+        if result['price'] != 'N/A':
+            g3d_mark = int(row_data['g3d-mark'].replace(',', ''))
+            price = float(result['price'])
+            result['performance_to_price_ratio'] = g3d_mark / price
+        else:
+            result['performance_to_price_ratio'] = 0
+
+    return ebay_results
+
+
+def display_top_deals(ebay_results, n=10):
+    sorted_results = sorted(
+        ebay_results, key=lambda x: x['performance_to_price_ratio'], reverse=True)
+    top_deals = sorted_results[:n]
+
+    print(f"\nTop {n} best deals:")
+    for rank, deal in enumerate(top_deals, start=1):
+        print(f"{rank}. {deal['name']} - {deal['title']}")
+        print(
+            f"   Price: {deal['price']} - Performance-to-Price Ratio: {deal['performance_to_price_ratio']:.2f}")
+        print(f"   URL: {deal['url']}\n")
 
 
 def main():
@@ -101,6 +126,7 @@ def main():
     data = get_gpu_data(driver)
     api = Finding(siteid='EBAY-GB', appid=APP_ID, config_file=None)
     ebay_results = fetch_gpu_from_ebay(api, data)
+    ebay_results = calculate_performance_to_price_ratio(ebay_results, data)
 
     for row in data:
         print(row)
@@ -108,36 +134,10 @@ def main():
     for result in ebay_results:
         print(result)
 
+    display_top_deals(ebay_results, n=10)
+
     input("Press Enter to close the browser...")
 
 
 if __name__ == "__main__":
     main()
-
-
-# Close the browser when you're done
-
-
-# video_card_data = []
-# for item in data:
-#     video_card_data.append([
-#         item['name'],
-#         item['g3d_mark'],
-#         item['price'],
-#         item['value'],
-#         item['tdp_watts'],
-#         item['power_perf'],
-#         item['test_date']
-#     ])
-
-# columns = ['Name', 'G3D_Mark', 'Price', 'Value', 'TDP_Watts', 'Power_Perf', 'Test_Date']
-# df = pd.DataFrame(video_card_data, columns=columns)
-# df.to_csv('video_card_data.csv', index=False)
-
-
-# # Sort GPUs by value to performance ratio
-# sorted_gpu_deals = sorted(gpu_deals.values(), key=itemgetter("ratio"), reverse=True)
-
-# # Print top 10 deals
-# for deal in sorted_gpu_deals[:10]:
-#     print(f"Name: {deal['name']}\nPrice: ${deal['price']}\nURL: {deal['url']}\nValue to Performance Ratio: {deal['ratio']}\n")
