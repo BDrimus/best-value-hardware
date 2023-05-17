@@ -161,45 +161,45 @@ for row in data:
     keyword = row['name']
     payload = {
         'keywords': keyword,
+        'categoryId': '27386',
         'itemFilter': [
-            {'name': 'ListingType', 'value': 'FixedPrice'}
+            {'name': 'ListingType', 'value': 'FixedPrice'},
         ],
         'paginationInput': {
-            'entriesPerPage': 1,
+            'entriesPerPage': 10,
             'pageNumber': 1,
         },
         'sortOrder': 'PricePlusShippingLowest',
     }
 
-    # Execute the findItemsAdvanced operation and retrieve the first result
-    try:
-        response = api.execute('findItemsAdvanced', payload)
-        print(response.dict())
-        print("==================================================")
-        if response.reply.searchResult._count == '0':
-            item = None
-            title = 'N/A'
-            price = 'N/A'
-            listing_url = 'N/A'  # Add this line to set a default value for the URL
-        else:
-            item = response.reply.searchResult.item[0]
-            print(item)
-            title = item.title
-            price = item.sellingStatus.currentPrice.value
-            listing_url = item.viewItemURL  # Add this line to get the listing URL
+    # Execute the findItemsAdvanced operation
+    response = api.execute('findItemsAdvanced', payload)
+    if response.reply.searchResult._count != '0':
+        items = response.reply.searchResult.item
+    else:
+        items = []
 
-        # Store the title, price, and URL in a dictionary and append it to the results list
-        result = {'name': keyword, 'title': title, 'price': price,
-                  'url': listing_url}  # Modify this line to include the URL
-        ebay_results.append(result)
-    except (ConnectionError, IndexError):
-        # Handle errors gracefully
+    # Check each item's title and skip items containing 'box'
+    first_valid_item = None
+    for item in items:
+        if 'box' not in item.title.lower():
+            first_valid_item = item
+            break
+
+    # If a valid item is found, extract the relevant information
+    if first_valid_item:
+        title = first_valid_item.title
+        price = first_valid_item.sellingStatus.currentPrice.value
+        listing_url = first_valid_item.viewItemURL
+    else:
         title = 'N/A'
         price = 'N/A'
-        listing_url = 'N/A'  # Add this line to set a default value for the URL
-        result = {'name': keyword, 'title': title, 'price': price,
-                  'url': listing_url}  # Modify this line to include the URL
-        ebay_results.append(result)
+        listing_url = 'N/A'
+
+    # Store the title, price, and URL in a dictionary and append it to the results list
+    result = {'name': keyword, 'title': title, 'price': price,
+              'url': listing_url}
+    ebay_results.append(result)
 
 # Print the search results
 for result in ebay_results:
