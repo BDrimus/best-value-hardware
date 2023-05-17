@@ -12,7 +12,6 @@ from operator import itemgetter
 from ebaysdk.finding import Connection as Finding
 from ebaysdk.exception import ConnectionError
 
-
 def setup_driver(url):
     chrome_options = Options()
     chrome_options.add_argument("--headless")
@@ -50,7 +49,7 @@ def get_gpu_data(driver):
         }
         g3d_mark = int(row_data['g3d-mark'].replace(',', ''))
 
-        if g3d_mark < 5000:
+        if g3d_mark < 20000:
             break
 
         data.append(row_data)
@@ -67,6 +66,7 @@ def fetch_gpu_from_ebay(api, data, exclude=[]):
             'categoryId': '27386',
             'itemFilter': [
                 {'name': 'ListingType', 'value': 'FixedPrice'},
+                #{'name': 'Condition', 'value': ['1000', '3000']},
             ],
             'paginationInput': {
                 'entriesPerPage': 10,
@@ -114,39 +114,58 @@ def calculate_performance_to_price_ratio(ebay_results, data):
     return ebay_results
 
 
-def display_top_deals(ebay_results, n=10):
+def display_top_deals(ebay_results, data, n=10):
     sorted_results = sorted(
         ebay_results, key=lambda x: x['performance_to_price_ratio'], reverse=True)
     top_deals = sorted_results[:n]
 
     print(f"\nTop {n} best deals:")
     for rank, deal in enumerate(top_deals, start=1):
+        gpu_data = next((d for d in data if d["name"] == deal["name"]), None)
+        g3d_mark = gpu_data["g3d-mark"] if gpu_data else "N/A"
         print(f"{rank}. {deal['name']} - {deal['title']}")
         print(
-            f"   Price: {deal['price']} - Performance-to-Price Ratio: {deal['performance_to_price_ratio']:.2f}")
+            f"   Price: {deal['price']} - Performance-to-Price Ratio: {deal['performance_to_price_ratio']:.2f} - G3D Mark: {g3d_mark}")
         print(f"   URL: {deal['url']}\n")
 
 
 def main():
+    start_time = time.time()
+
+    print("Starting the script...")
     url = "https://www.videocardbenchmark.net/GPU_mega_page.html"
     driver = setup_driver(url)
+
+    print("Clicking buttons...")
     click_buttons(driver)
+
+    print("Fetching GPU data...")
     data = get_gpu_data(driver)
+
+    print("Fetching GPU deals from eBay...")
     api = Finding(siteid='EBAY-GB', appid=APP_ID, config_file=None)
 
     # Add any exclusion keywords here
-    exclude = ['box', 'cover', 'plate', 'bracket', 'fan', 'mat', 'chip', 'block']
+    exclude = ['faulty', 'box', 'cover', 'plate', 'bracket', 'fan', 'mat', 'chip', 'block', 'bezel', 'cable', 'mod', 'FDC10M12S9-C']
 
     ebay_results = fetch_gpu_from_ebay(api, data, exclude=exclude)
+
+    print("Calculating performance-to-price ratios...")
     ebay_results = calculate_performance_to_price_ratio(ebay_results, data)
 
+    print("\nGPU data:")
     for row in data:
         print(row)
 
+    print("\neBay results:")
     for result in ebay_results:
         print(result)
 
-    display_top_deals(ebay_results, n=10)
+    display_top_deals(ebay_results, data, n=10)
+
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print(f"\nThe script took {elapsed_time:.2f} seconds to complete.")
 
     #input("Press Enter to close the browser...") # For debugging
 
