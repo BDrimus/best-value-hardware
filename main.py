@@ -5,6 +5,7 @@ from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.options import Options
 
 from bs4 import BeautifulSoup
 from operator import itemgetter
@@ -21,7 +22,9 @@ APP_ID = "BenceDri-BestValu-PRD-507ba9c25-6f94291c"
 
 
 def setup_driver(url):
-    driver = webdriver.Chrome()
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    driver = webdriver.Chrome(options=chrome_options)
     driver.get(url)
     return driver
 
@@ -55,7 +58,7 @@ def get_gpu_data(driver):
         }
         g3d_mark = int(row_data['g3d-mark'].replace(',', ''))
 
-        if g3d_mark < 20000:
+        if g3d_mark < 5000:
             break
 
         data.append(row_data)
@@ -63,7 +66,7 @@ def get_gpu_data(driver):
     return data
 
 
-def fetch_gpu_from_ebay(api, data):
+def fetch_gpu_from_ebay(api, data, exclude=[]):
     ebay_results = []
     for row in data:
         keyword = row['name']
@@ -83,8 +86,13 @@ def fetch_gpu_from_ebay(api, data):
         response = api.execute('findItemsAdvanced', payload)
         items = response.reply.searchResult.item if response.reply.searchResult._count != '0' else []
 
-        first_valid_item = next(
-            (item for item in items if 'box' not in item.title.lower()), None)
+        first_valid_item = None
+        for item in items:
+            if any(ex in item.title.lower() for ex in exclude):
+                continue
+            else:
+                first_valid_item = item
+                break
 
         if first_valid_item:
             title = first_valid_item.title
@@ -133,7 +141,11 @@ def main():
     click_buttons(driver)
     data = get_gpu_data(driver)
     api = Finding(siteid='EBAY-GB', appid=APP_ID, config_file=None)
-    ebay_results = fetch_gpu_from_ebay(api, data)
+
+    # Add any exclusion keywords here
+    exclude = ['box', 'cover', 'plate', 'bracket', 'fan', 'mat', 'chip', 'block']
+
+    ebay_results = fetch_gpu_from_ebay(api, data, exclude=exclude)
     ebay_results = calculate_performance_to_price_ratio(ebay_results, data)
 
     for row in data:
@@ -144,7 +156,7 @@ def main():
 
     display_top_deals(ebay_results, n=10)
 
-    input("Press Enter to close the browser...")
+    #input("Press Enter to close the browser...") # For debugging
 
 
 if __name__ == "__main__":
