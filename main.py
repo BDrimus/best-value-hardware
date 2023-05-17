@@ -120,6 +120,38 @@ button = wait.until(EC.element_to_be_clickable((By.XPATH, '//*[@id="cputable"]/t
 button.click()
 button.click()
 
+# Find the table element
+table = driver.find_element(By.XPATH, '//*[@id="cputable"]/tbody')
+
+# Find all the rows in the table
+rows = table.find_elements(By.TAG_NAME, 'tr')
+
+# Initialize an empty list to store the row data
+data = []
+
+# Iterate over each row
+for row in rows:
+    # Find all the cells in the row
+    cells = row.find_elements(By.TAG_NAME, 'td')
+    
+    # Extract the text from each cell and store it in a dictionary
+    row_data = {
+        'name': cells[1].text,
+        'g3d-mark': cells[2].text,
+    }
+
+    # Remove the comma from the 'g3d-mark' string and convert it to an integer
+    g3d_mark = int(row_data['g3d-mark'].replace(',', ''))
+
+    if g3d_mark < 30000:
+        break
+    
+    # Append the row data to the data list
+    data.append(row_data)
+
+# Print the scraped data
+for row in data:
+    print(row)
 
 
 # Wait for user input before closing the browser
