@@ -1,4 +1,5 @@
 import pandas as pd
+import re
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -49,12 +50,17 @@ def get_gpu_data(driver):
         }
         g3d_mark = int(row_data['g3d-mark'].replace(',', ''))
 
-        if g3d_mark < 20000:
+        if g3d_mark < 14000:
             break
 
         data.append(row_data)
 
     return data
+
+
+def is_gpu_model_in_title(gpu_model, title):
+    pattern = re.compile(r'\b' + re.escape(gpu_model.lower()) + r'\b')
+    return bool(pattern.search(title.lower()))
 
 
 def fetch_gpu_from_ebay(api, data, exclude=[]):
@@ -66,7 +72,7 @@ def fetch_gpu_from_ebay(api, data, exclude=[]):
             'categoryId': '27386',
             'itemFilter': [
                 {'name': 'ListingType', 'value': 'FixedPrice'},
-                #{'name': 'Condition', 'value': ['1000', '3000']},
+                {'name': 'Condition', 'value': ['1000', '3000']},
             ],
             'paginationInput': {
                 'entriesPerPage': 10,
@@ -80,7 +86,7 @@ def fetch_gpu_from_ebay(api, data, exclude=[]):
 
         first_valid_item = None
         for item in items:
-            if any(ex in item.title.lower() for ex in exclude):
+            if any(ex in item.title.lower() for ex in exclude) or not is_gpu_model_in_title(keyword, item.title):
                 continue
             else:
                 first_valid_item = item
@@ -146,7 +152,8 @@ def main():
     api = Finding(siteid='EBAY-GB', appid=APP_ID, config_file=None)
 
     # Add any exclusion keywords here
-    exclude = ['faulty', 'box', 'cover', 'plate', 'bracket', 'fan', 'mat', 'chip', 'block', 'bezel', 'cable', 'mod', 'FDC10M12S9-C']
+    exclude = ['faulty', 'box', 'cover', 'plate', 'bracket', 'fan',
+               'mat', 'chip', 'block', 'bezel', 'cable', 'mod', 'FDC10M12S9-C']
 
     ebay_results = fetch_gpu_from_ebay(api, data, exclude=exclude)
 
@@ -167,7 +174,7 @@ def main():
     elapsed_time = end_time - start_time
     print(f"\nThe script took {elapsed_time:.2f} seconds to complete.")
 
-    #input("Press Enter to close the browser...") # For debugging
+    # input("Press Enter to close the browser...") # For debugging
 
 
 if __name__ == "__main__":
