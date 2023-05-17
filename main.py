@@ -99,8 +99,6 @@ from ebaysdk.exception import ConnectionError
 #     print("Error: No GPUs found.")
 
 
-
-
 # Set up the Chrome WebDriver
 driver = webdriver.Chrome()
 
@@ -110,13 +108,16 @@ driver.get(url)
 
 # Wait for the button to be present and clickable
 wait = WebDriverWait(driver, 20)
-button = wait.until(EC.element_to_be_clickable((By.XPATH, '//*[@id="qc-cmp2-ui"]/div[2]/div/button[2]')))
+button = wait.until(EC.element_to_be_clickable(
+    (By.XPATH, '//*[@id="qc-cmp2-ui"]/div[2]/div/button[2]')))
 button.click()
 
-button = wait.until(EC.element_to_be_clickable((By.XPATH, '//*[@id="cputable_length"]/label/select/option[4]')))
+button = wait.until(EC.element_to_be_clickable(
+    (By.XPATH, '//*[@id="cputable_length"]/label/select/option[4]')))
 button.click()
 
-button = wait.until(EC.element_to_be_clickable((By.XPATH, '//*[@id="cputable"]/thead/tr/th[3]')))
+button = wait.until(EC.element_to_be_clickable(
+    (By.XPATH, '//*[@id="cputable"]/thead/tr/th[3]')))
 button.click()
 button.click()
 
@@ -133,7 +134,7 @@ data = []
 for row in rows:
     # Find all the cells in the row
     cells = row.find_elements(By.TAG_NAME, 'td')
-    
+
     # Extract the text from each cell and store it in a dictionary
     row_data = {
         'name': cells[1].text,
@@ -145,13 +146,64 @@ for row in rows:
 
     if g3d_mark < 30000:
         break
-    
+
     # Append the row data to the data list
     data.append(row_data)
 
 # Print the scraped data
 for row in data:
     print(row)
+
+# Function to fetch GPUs from eBay API
+api = Finding(siteid='EBAY-GB', appid=APP_ID, config_file=None)
+ebay_results = []
+for row in data:
+    keyword = row['name']
+    payload = {
+        'keywords': keyword,
+        'itemFilter': [
+            {'name': 'ListingType', 'value': 'FixedPrice'}
+        ],
+        'paginationInput': {
+            'entriesPerPage': 1,
+            'pageNumber': 1,
+        },
+        'sortOrder': 'PricePlusShippingLowest',
+    }
+
+    # Execute the findItemsAdvanced operation and retrieve the first result
+    try:
+        response = api.execute('findItemsAdvanced', payload)
+        print(response.dict())
+        print("==================================================")
+        if response.reply.searchResult._count == '0':
+            item = None
+            title = 'N/A'
+            price = 'N/A'
+            listing_url = 'N/A'  # Add this line to set a default value for the URL
+        else:
+            item = response.reply.searchResult.item[0]
+            print(item)
+            title = item.title
+            price = item.sellingStatus.currentPrice.value
+            listing_url = item.viewItemURL  # Add this line to get the listing URL
+
+        # Store the title, price, and URL in a dictionary and append it to the results list
+        result = {'name': keyword, 'title': title, 'price': price,
+                  'url': listing_url}  # Modify this line to include the URL
+        ebay_results.append(result)
+    except (ConnectionError, IndexError):
+        # Handle errors gracefully
+        title = 'N/A'
+        price = 'N/A'
+        listing_url = 'N/A'  # Add this line to set a default value for the URL
+        result = {'name': keyword, 'title': title, 'price': price,
+                  'url': listing_url}  # Modify this line to include the URL
+        ebay_results.append(result)
+
+# Print the search results
+for result in ebay_results:
+    print(result)
 
 
 # Wait for user input before closing the browser
