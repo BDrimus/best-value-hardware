@@ -1,5 +1,6 @@
 import pandas as pd
 import re
+import chromedriver_autoinstaller
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -23,6 +24,7 @@ import time
 
 APP_ID = "BenceDri-BestValu-PRD-507ba9c25-6f94291c"
 
+chromedriver_autoinstaller.install()  # Check if the current version of chromedriver exists
 
 def setup_driver(url):
     chrome_options = Options()
