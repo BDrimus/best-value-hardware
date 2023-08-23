@@ -1,5 +1,6 @@
 import pandas as pd
 import re
+import chromedriver_autoinstaller
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -13,6 +14,15 @@ from operator import itemgetter
 from ebaysdk.finding import Connection as Finding
 from ebaysdk.exception import ConnectionError
 
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from ebaysdk.finding import Connection as Finding
+
+import time
+
+chromedriver_autoinstaller.install()  # Check if the current version of chromedriver exists
 def setup_driver(url):
     chrome_options = Options()
     chrome_options.add_argument("--headless")
