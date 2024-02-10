@@ -1,20 +1,17 @@
 import pandas as pd
 import re
-import chromedriver_autoinstaller
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.common.by import By
-from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.firefox.options import Options
 
 from bs4 import BeautifulSoup
 from operator import itemgetter
 from ebaysdk.finding import Connection as Finding
 from ebaysdk.exception import ConnectionError
 
-from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -22,11 +19,12 @@ from ebaysdk.finding import Connection as Finding
 
 import time
 
-chromedriver_autoinstaller.install()  # Check if the current version of chromedriver exists
+MIN_G3D_MARK = 8000
+
 def setup_driver(url):
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")
-    driver = webdriver.Chrome(options=chrome_options)
+    firefox_options = Options()
+    firefox_options.add_argument("--headless")
+    driver = webdriver.Firefox(options=firefox_options)
     driver.get(url)
     return driver
 
@@ -60,7 +58,7 @@ def get_gpu_data(driver):
         }
         g3d_mark = int(row_data['g3d-mark'].replace(',', ''))
 
-        if g3d_mark < 14000:
+        if g3d_mark < MIN_G3D_MARK:
             break
 
         data.append(row_data)
