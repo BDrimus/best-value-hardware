@@ -21,7 +21,7 @@ import time
 
 APP_ID = "BenceDri-BestValu-PRD-507ba9c25-6f94291c"
 
-MIN_G3D_MARK = 8000
+MIN_G3D_MARK = 8000 # NOTE - Find scores on this site: https://www.videocardbenchmark.net/GPU_mega_page.html
 
 def setup_driver(url):
     firefox_options = Options()
