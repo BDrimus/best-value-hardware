@@ -1,25 +1,25 @@
-import pandas as pd
 import re
 from selenium import webdriver
-from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.firefox.options import Options
 
-from bs4 import BeautifulSoup
-from operator import itemgetter
-from ebaysdk.finding import Connection as Finding
-from ebaysdk.exception import ConnectionError
-
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from ebaysdk.finding import Connection as Finding
-
 import time
+import base64
+import requests
 
-MIN_G3D_MARK = 8000 # NOTE - Find scores on this site: https://www.videocardbenchmark.net/GPU_mega_page.html
+import config
+
+# --- Constants ---
+# Find scores on this site: https://www.videocardbenchmark.net/GPU_mega_page.html
+MIN_G3D_MARK = 8000
+BENCHMARK_URL = "https://www.videocardbenchmark.net/GPU_mega_page.html"
+# Keywords to exclude from eBay titles to avoid accessories/parts
+EXCLUDE_KEYWORDS = [
+    'faulty', 'box', 'cover', 'plate', 'bracket', 'fan', 'bridge', 'cooler', "powerlink", "adapter", "artifact", "shroud only"
+    'mat', 'chip', 'block', 'bezel', 'cable', 'mod', 'waterblock', "shield kit", "part", "bad", "not working", "untested", "⚠️"
+]
 
 def setup_driver(url):
     firefox_options = Options()
@@ -71,51 +71,87 @@ def is_gpu_model_in_title(gpu_model, title):
     return bool(pattern.search(title.lower()))
 
 
-def fetch_gpu_from_ebay(api, data, exclude=[]):
+def fetch_gpu_from_ebay(data, exclude=[], region="GB"):
+    credentials = f"{config.EBAY_APP_ID}:{config.EBAY_CERT_ID}"
+    encoded_credentials = base64.b64encode(credentials.encode()).decode()
+
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Authorization": f"Basic {encoded_credentials}"
+    }
+
+    data_token = {
+        "grant_type": "client_credentials",
+        "scope": "https://api.ebay.com/oauth/api_scope"
+    }
+
+    response = requests.post("https://api.ebay.com/identity/v1/oauth2/token", headers=headers, data=data_token)
+    token_response = response.json()
+
+    access_token = token_response.get("access_token")
+    if not access_token:
+        print("Failed to retrieve access token:", token_response)
+        return []
+
+    headers = {
+        'Authorization': f"Bearer {access_token}"
+    }
+
     ebay_results = []
-    for row in data:
-        keyword = row['name']
-        payload = {
-            'keywords': keyword,
-            'categoryId': '27386',
-            'itemFilter': [
-                {'name': 'ListingType', 'value': 'FixedPrice'},
-                {'name': 'Condition', 'value': ['1000', '3000']},
-            ],
-            'paginationInput': {
-                'entriesPerPage': 10,
-                'pageNumber': 1,
-            },
-            'sortOrder': 'PricePlusShippingLowest',
-        }
+    batch_size = 5  # Process GPUs in batches to reduce API calls
 
-        response = api.execute('findItemsAdvanced', payload)
-        items = response.reply.searchResult.item if response.reply.searchResult._count != '0' else []
+    for i in range(0, len(data), batch_size):
+        batch = data[i:i + batch_size]
 
-        first_valid_item = None
-        for item in items:
-            if any(ex in item.title.lower() for ex in exclude) or not is_gpu_model_in_title(keyword, item.title):
-                continue
+        for row in batch:
+            keyword = row['name']
+            url = f"https://api.ebay.com/buy/browse/v1/item_summary/search?q={keyword}&category_ids=27386&limit=10&filter=item_location_country:{region},condition:NEW|USED&sort=price"
+
+            max_retries = 5
+            retry_delay = 5
+
+            for attempt in range(max_retries):
+                try:
+                    response = requests.get(url, headers=headers)
+                    response.raise_for_status()
+                    items = response.json().get('itemSummaries', [])
+                    break
+                except requests.exceptions.RequestException as e:
+                    print(f"API call failed (attempt {attempt + 1}/{max_retries}): {e}")
+                    time.sleep(retry_delay * (2 ** attempt))  # Exponential backoff
             else:
-                first_valid_item = item
-                break
+                print("Max retries reached. Skipping this keyword.")
+                continue
 
-        if first_valid_item:
-            title = first_valid_item.title
-            price = float(first_valid_item.sellingStatus.currentPrice.value)
-            shipping_cost = float(first_valid_item.shippingInfo.shippingServiceCost.value) if hasattr(
-                first_valid_item.shippingInfo, 'shippingServiceCost') else 0
-            total_price = price + shipping_cost
-            listing_url = first_valid_item.viewItemURL
-        else:
-            title = 'N/A'
-            total_price = 'N/A'
-            shipping_cost = 'N/A'
-            listing_url = 'N/A'
+            first_valid_item = None
+            for item in items:
+                if any(ex in item['title'].lower() for ex in exclude) or not is_gpu_model_in_title(keyword, item['title']):
+                    continue
+                else:
+                    first_valid_item = item
+                    break
 
-        result = {'name': keyword, 'title': title, 'price': total_price,
-                  'shipping_cost': shipping_cost, 'url': listing_url}
-        ebay_results.append(result)
+            if first_valid_item:
+                title = first_valid_item['title']
+                price = float(first_valid_item['price']['value'])
+                shipping_cost = 0
+                if 'shippingOptions' in first_valid_item and first_valid_item['shippingOptions']:
+                    shipping_option = first_valid_item['shippingOptions'][0]
+                    shipping_cost = float(shipping_option['shippingCost']['value']) if 'shippingCost' in shipping_option else 0
+                total_price = price + shipping_cost
+                listing_url = first_valid_item['itemWebUrl']
+            else:
+                title = 'N/A'
+                total_price = 'N/A'
+                shipping_cost = 'N/A'
+                listing_url = 'N/A'
+
+            result = {'name': keyword, 'title': title, 'price': total_price,
+                      'shipping_cost': shipping_cost, 'url': listing_url}
+            ebay_results.append(result)
+
+        print(f"Processed batch {i // batch_size + 1}/{-(-len(data) // batch_size)}")
+        time.sleep(1)  # Longer delay between batches
 
     return ebay_results
 
@@ -164,13 +200,8 @@ def main():
     data = get_gpu_data(driver)
 
     print("Fetching GPU deals from eBay...")
-    api = Finding(siteid='EBAY-GB', appid=APP_ID, config_file=None)
 
-    # Add any exclusion keywords here
-    exclude = ['faulty', 'box', 'cover', 'plate', 'bracket', 'fan', 'bridge', 'cooler',
-               'mat', 'chip', 'block', 'bezel', 'cable', 'mod', 'FDC10M12S9-C']
-
-    ebay_results = fetch_gpu_from_ebay(api, data, exclude=exclude)
+    ebay_results = fetch_gpu_from_ebay(data, exclude=EXCLUDE_KEYWORDS)
 
     print("Calculating performance-to-price ratios...")
     ebay_results = calculate_performance_to_price_ratio(ebay_results, data)
