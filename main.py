@@ -8,6 +8,7 @@ from selenium.webdriver.firefox.options import Options
 import time
 import base64
 import requests
+import sys
 
 import config
 from models import GPUData, EbayResult
@@ -18,7 +19,9 @@ MIN_G3D_MARK = 14000
 BENCHMARK_URL = "https://www.videocardbenchmark.net/GPU_mega_page.html"
 # Keywords to exclude from eBay titles to avoid accessories/parts
 EXCLUDE_KEYWORDS = [
-    "only", 'faulty', "box", "fan", "bios chip", "no gpu", "heatsink only", "cooler", "packaging", "cooling system", "water cooled block",
+    "only", 'faulty', "box", "fan", "bios chip", "no gpu", "heatsink only", "cooler", "packaging", "cooling system", "water cooled block", "sticker", "holder", "bracket", "backplate", "headset", "monitor", "cable", "badge", "magnet", "blender", "mod",
+    "alphacool", "adapter", "water block", "nvlink", "connector", "keychain", "accessory", "stouchi", "displayport", "mount", "battery", "waterblock", "ekwb", "replacement", "charger", "mouse mat", "pad", "power supply", "mousemat", "memory mesh",
+    "heatsink", "power supply", "alienware", 
 ]
 BASE_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search"
 
@@ -26,7 +29,8 @@ desired_condition_ids = [1000, 3000]  # New, Used
 
 condition_ids_values = "|".join(map(str, desired_condition_ids))
 
-filter_params = f"conditionIds:{{{condition_ids_values}}},itemLocationCountry:GB,deliveryCountry:GB"
+filter_params = f"conditionIds:{{{condition_ids_values}}},itemLocationCountry:GB"
+# filter_params = f"conditionIds:{{{condition_ids_values}}},itemLocationCountry:GB,deliveryCountry:GB"
 
 def setup_driver(url):
     firefox_options = Options()
@@ -74,34 +78,32 @@ def get_gpu_data(driver):
 
 
 def is_gpu_model_in_title(gpu_model, title):
-    pattern = re.compile(r'\b' + re.escape(gpu_model.lower()) + r'\b')
-    return bool(pattern.search(title.lower()))
+    """
+    Checks if all the essential parts of the GPU model name are present as whole words
+    in the listing title, while ignoring common brand prefixes.
+    """
+    model_parts = gpu_model.lower().split()
+    title_lower = title.lower()
 
+    # Define brand prefixes that are often omitted by sellers
+    prefixes_to_ignore = ['geforce', 'radeon', 'intel', 'arc']
+    
+    # Create a list of only the essential keywords we must find
+    essential_parts = [part for part in model_parts if part not in prefixes_to_ignore]
 
-def fetch_gpu_from_ebay(data, exclude=[], region="GB"):
-    credentials = f"{config.EBAY_APP_ID}:{config.EBAY_CERT_ID}"
-    encoded_credentials = base64.b64encode(credentials.encode()).decode()
+    # Check if ALL essential parts exist as whole words in the title
+    try:
+        return all(re.search(r'\b' + re.escape(part) + r'\b', title_lower) for part in essential_parts)
+    except re.error:
+        # Fallback for edge cases where a part might be empty or invalid
+        return False
+    
 
-    headers = {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Authorization": f"Basic {encoded_credentials}"
-    }
-
-    data_token = {
-        "grant_type": "client_credentials",
-        "scope": "https://api.ebay.com/oauth/api_scope"
-    }
-
-    response = requests.post("https://api.ebay.com/identity/v1/oauth2/token", headers=headers, data=data_token)
-    token_response = response.json()
-
-    access_token = token_response.get("access_token")
-    if not access_token:
-        print("Failed to retrieve access token:", token_response)
-        return []
+def fetch_gpu_from_ebay(data, access_token, exclude=[], Marketplace_ID="EBAY_GB"):
 
     headers = {
-        'Authorization': f"Bearer {access_token}"
+        'Authorization': f"Bearer {access_token}",
+        'X-EBAY-C-MARKETPLACE-ID': Marketplace_ID
     }
 
     ebay_results = []
@@ -120,8 +122,8 @@ def fetch_gpu_from_ebay(data, exclude=[], region="GB"):
             keyword = row.name
             url = (f"https://api.ebay.com/buy/browse/v1/item_summary/search"
                f"?q={keyword}"
-               f"&category_ids=27386"
-               f"&limit=10"
+            #    f"&category_ids=27386"
+               f"&limit=50"
                f"&filter={filter_params}"
                f"&sort=price")
 
@@ -189,8 +191,6 @@ def calculate_performance_to_price_ratio(ebay_results, data):
     return ebay_results
 
 
-
-
 def display_top_deals(ebay_results, data, n=10):
     sorted_results = sorted(
         ebay_results, key=lambda x: x.performance_to_price_ratio, reverse=True)
@@ -204,6 +204,43 @@ def display_top_deals(ebay_results, data, n=10):
         print(
             f"   Price: {deal.price} - Shipping Cost: {deal.shipping_cost} - Performance-to-Price Ratio: {deal.performance_to_price_ratio:.2f} - G3D Mark: {g3d_mark}")
         print(f"   URL: {deal.url}\n")
+
+
+def get_ebay_access_token():
+    """
+    Retrieves the eBay API access token.
+    """
+    print("Getting eBay API access token...")
+    credentials = f"{config.EBAY_APP_ID}:{config.EBAY_CERT_ID}"
+    encoded_credentials = base64.b64encode(credentials.encode()).decode()
+
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Authorization": f"Basic {encoded_credentials}"
+    }
+
+    data = {
+        "grant_type": "client_credentials",
+        "scope": "https://api.ebay.com/oauth/api_scope"
+    }
+
+    try:
+        response = requests.post("https://api.ebay.com/identity/v1/oauth2/token", headers=headers, data=data)
+        response.raise_for_status()  # This will raise an exception for HTTP error codes
+        token_response = response.json()
+        access_token = token_response.get("access_token")
+
+        if not access_token:
+            print("Failed to retrieve access token: 'access_token' key not found in response.")
+            sys.exit(1) # Exit the script if no token
+        
+        print("Successfully obtained access token.")
+        return access_token
+
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to retrieve access token. Error: {e}")
+        print(f"Response body: {response.text}")
+        sys.exit(1) # Exit the script on error
 
 
 def main():
@@ -221,7 +258,11 @@ def main():
 
     print("Fetching GPU deals from eBay...")
 
-    ebay_results = fetch_gpu_from_ebay(gpu_data, exclude=EXCLUDE_KEYWORDS)
+    ebay_access_token = get_ebay_access_token()
+
+    print("ebay_access_token", ebay_access_token)
+
+    ebay_results = fetch_gpu_from_ebay(gpu_data, ebay_access_token, exclude=EXCLUDE_KEYWORDS)
 
     print("Calculating performance-to-price ratios...")
     ebay_results = calculate_performance_to_price_ratio(ebay_results, gpu_data)
