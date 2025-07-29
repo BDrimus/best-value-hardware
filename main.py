@@ -13,6 +13,8 @@ import sys
 import config
 from models import GPUData, EbayResult
 
+# TODO - Add option to get multiple deals for each gpu model not just the best one
+
 # --- Constants ---
 # Find scores on this site: https://www.videocardbenchmark.net/GPU_mega_page.html
 MIN_G3D_MARK = 14000
